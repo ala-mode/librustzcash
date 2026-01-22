@@ -18,6 +18,9 @@ ENV SOURCE_DATE_EPOCH=1
 # ENV CXXFLAGS="-include cstdint" #needed?
 # ENV ROCKSDB_USE_PKG_CONFIG=0 # not needed
 ENV CARGO_HOME=/usr/local/cargo
+# target dir to output all crates into a single directory
+ENV CARGO_TARGET_DIR=/usr/src/app/output_crates
+RUN mkdir -p /usr/src/app/output_crates
 
 WORKDIR /usr/src/app
 # Copy the entire workspace to include all crates
@@ -68,10 +71,14 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 SHELL ["/bin/bash", "-c"]
 # RUN for name in $(cargo metadata --format-version 1 --no-deps --all-features | jq -r '.packages[].name'); do echo "Publishing: $name"; RUSTFLAGS="-C target-feature=-crt-static" cargo publish -p "$name" --dry-run; done
 RUN for name in $(cargo metadata --format-version 1 --no-deps --all-features | jq -r '.packages[].name'); do echo "Publishing: $name"; cargo publish -p "$name" --dry-run; done
+# --frozen ?
+# --all-features ?
 RUN ls -la
+RUN ls -la /usr/src/app/output_crates
+RUN tree /usr/src/app/output_crates
 
 # --- Stage 2: layer for local extraction ---
-# FROM scratch AS export
+FROM scratch AS export
 
-# 
-# COPY --from=builder /usr/src/app/.../etc /exported
+COPY --from=builder /usr/src/app/output_crates /exported
+# there is no /bin/sh 
