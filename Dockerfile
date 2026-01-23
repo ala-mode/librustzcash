@@ -52,33 +52,32 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 #  if Cargo.toml has changed (e.g., new dependencies), but Cargo.lock hasn't been updated, the build fails
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
-    cargo metadata --locked --format-version=1 > /dev/null 2>&1
+    cargo metadata --locked --all-features --format-version=1 > /dev/null 2>&1
 
-
-# build all dependent crates in release mode
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/usr/local/cargo/git \
-    --mount=type=cache,target=/usr/src/app/target \
-    --network=none \
-    cargo build --release --frozen \
-      # builds all members in the workspace
-      --workspace \
-      --target ${TARGET_ARCH} \
-      # currently building only with all features.
-      --all-features
-
+#  build all crates in release mode
+#  all members of the workspace
+#  with all features.
+# RUN --mount=type=cache,target=/usr/local/cargo/registry \
+#      --mount=type=cache,target=/usr/local/cargo/git \
+#      --mount=type=cache,target=/usr/src/app/target \
+#      --network=none \
+#      cargo build --release --frozen --workspace --target ${TARGET_ARCH} --all-features
+    
+ENV RUSTFLAGS="-C codegen-units=1 -C target-feature=-crt-static"
 # Parse workspace and output dry-run publish commands
 SHELL ["/bin/bash", "-c"]
 # RUN for name in $(cargo metadata --format-version 1 --no-deps --all-features | jq -r '.packages[].name'); do echo "Publishing: $name"; RUSTFLAGS="-C target-feature=-crt-static" cargo publish -p "$name" --dry-run; done
-RUN for name in $(cargo metadata --format-version 1 --no-deps --all-features | jq -r '.packages[].name'); do echo "Publishing: $name"; cargo publish -p "$name" --dry-run; done
-# --frozen ?
-# --all-features ?
-RUN ls -la
-RUN ls -la /usr/src/app/output_crates
-RUN tree /usr/src/app/output_crates
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    for name in $(cargo metadata --format-version 1 --no-deps --all-features | jq -r '.packages[].name'); do echo "Publishing: $name"; cargo publish -p "$name" --dry-run --all-features; done
+
+
+RUN ls -la /usr/src/app/output_crates/package/
+RUN ls -la /usr/src/app/output_crates/package/*.crate
+# RUN tree /usr/src/app/output_crates/package/*.crate
 
 # --- Stage 2: layer for local extraction ---
 FROM scratch AS export
 
-COPY --from=builder /usr/src/app/output_crates /exported
+COPY --from=builder /usr/src/app/output_crates/package/*.crate /exported
 # there is no /bin/sh 
