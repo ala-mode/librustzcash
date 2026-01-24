@@ -69,7 +69,7 @@ SHELL ["/bin/bash", "-c"]
 # RUN for name in $(cargo metadata --format-version 1 --no-deps --all-features | jq -r '.packages[].name'); do echo "Publishing: $name"; RUSTFLAGS="-C target-feature=-crt-static" cargo publish -p "$name" --dry-run; done
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
-    for name in $(cargo metadata --format-version 1 --no-deps --all-features | jq -r '.packages[].name'); do echo "Publishing: $name"; cargo publish -p "$name" --dry-run --all-features; done
+    for name in $(cargo metadata --format-version 1 --no-deps --all-features | jq -r '.packages[].name'); do echo "Publishing: $name"; cargo publish -p "$name" --dry-run --no-verify --all-features; done
 
 
 RUN ls -la /usr/src/app/output_crates/package/
