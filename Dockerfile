@@ -7,6 +7,30 @@ FROM stagex/user-jq@sha256:0c75672e97f54b83661aaa498e053340305e79cdc2004a40d92b7
 # bash allows us to iterate over the names from `cargo metadata`
 FROM stagex/core-bash@sha256:6217a843ac51eb8073c3cf13be7d4d1cc9e28f7d7a1f9fd23feb0caa604f73bf AS bash-shim
 
+# --- Stage 0 get the package dependency order
+FROM pallet-rust AS json_output
+COPY --from=protobuf . /
+COPY --from=abseil-cpp . /
+COPY --from=jq-shim . /
+COPY --from=bash-shim . /
+
+ENV SOURCE_DATE_EPOCH=1
+ENV CARGO_HOME=/usr/local/cargo
+WORKDIR /usr/src/app
+# Copy the entire workspace to include all crates
+COPY . .
+# print backtrace w panic, useful for development only?
+ENV RUST_BACKTRACE=1
+ENV RUSTFLAGS="-C codegen-units=1"
+
+RUN cargo install cargo-workspaces
+#RUN cargo workspaces list --json | jq -r '.[].name' > publish_order.txt
+RUN cargo workspaces plan --json
+#RUN cargo workspaces plan --long --json
+RUN pwd
+RUN ls -la
+RUN find ./ -type f -name "*.crate" -exec ls -lat -tc --full-time {} \; > ordered_crate_list.json
+
 # --- Stage 1: Build with Rust --- (amd64)
 FROM pallet-rust AS builder
 COPY --from=protobuf . /
@@ -25,17 +49,25 @@ RUN mkdir -p /usr/src/app/output_crates
 WORKDIR /usr/src/app
 # Copy the entire workspace to include all crates
 COPY . .
+COPY --from=json_output /usr/src/app/ordered_crate_list.json /ocl.json
+
 
 # print backtrace w panic, useful for development only?
 ENV RUST_BACKTRACE=1
 ENV RUSTFLAGS="-C codegen-units=1"
-# enables the C runtime to be linked statically w/ linux musl
+
+RUN pwd
+RUN ls -lat *.json
+
+
+# something in this block seems to also make the TARGET_ARCH implicit
+# enables the C runtime to be linked statically w/ linux musl ?
 ENV RUSTFLAGS="${RUSTFLAGS} -C target-feature=+crt-static"
 # disables build ID in final binary by linker wrapper flag
 ENV RUSTFLAGS="${RUSTFLAGS} -C link-arg=-Wl,--build-id=none"
 # any GCC version passes
 ENV CFLAGS="-D__GNUC_PREREQ(maj,min)=1"
-ENV TARGET_ARCH="x86_64-unknown-linux-musl"
+#ENV TARGET_ARCH="x86_64-unknown-linux-musl"
 
 # testing
 # RUN openssl s_client -connect index.crates.io:443 -servername index.crates.io
@@ -43,16 +75,17 @@ ENV TARGET_ARCH="x86_64-unknown-linux-musl"
 # RUN ls -la ~/.cargo/ || echo "No .cargo dir"
 # RUN cat ~/.cargo/config || echo "No config"
 
+# maybe not needed. Let
 # This caches Cargo’s registry and git dependencies.
 # If Cargo.toml changes and invalidates the layer, the next build still reuses the cached crates instead of redownloading them.
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/usr/local/cargo/git \
-    cargo fetch --locked --target $TARGET_ARCH
-
+# RUN --mount=type=cache,target=/usr/local/cargo/registry \
+#     --mount=type=cache,target=/usr/local/cargo/git \
+#     cargo fetch --locked --target $TARGET_ARCH
+# 
 #  if Cargo.toml has changed (e.g., new dependencies), but Cargo.lock hasn't been updated, the build fails
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/usr/local/cargo/git \
-    cargo metadata --locked --all-features --format-version=1 > /dev/null 2>&1
+# RUN --mount=type=cache,target=/usr/local/cargo/registry \
+#     --mount=type=cache,target=/usr/local/cargo/git \
+#     cargo metadata --locked --all-features --format-version=1 > /dev/null 2>&1
 
 #  build all crates in release mode
 #  all members of the workspace
@@ -63,13 +96,19 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 #      --network=none \
 #      cargo build --release --frozen --workspace --target ${TARGET_ARCH} --all-features
     
-ENV RUSTFLAGS="-C codegen-units=1 -C target-feature=-crt-static"
+#ENV RUSTFLAGS="-C codegen-units=1 -C target-feature=-crt-static"
+#SHELL ["/bin/bash", "-c"]
 # Parse workspace and output dry-run publish commands
-SHELL ["/bin/bash", "-c"]
-# RUN for name in $(cargo metadata --format-version 1 --no-deps --all-features | jq -r '.packages[].name'); do echo "Publishing: $name"; RUSTFLAGS="-C target-feature=-crt-static" cargo publish -p "$name" --dry-run; done
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/usr/local/cargo/git \
-    for name in $(cargo metadata --format-version 1 --no-deps --all-features | jq -r '.packages[].name'); do echo "Publishing: $name"; cargo publish -p "$name" --dry-run --no-verify --all-features; done
+# --no-verify
+#
+#RUN --mount=type=cache,target=/usr/local/cargo/registry \
+#    --mount=type=cache,target=/usr/local/cargo/git \
+
+# regex scratch
+RUN [[ "$name" =~ ^[a-zA-Z0-9_.-]+$ ]] || { echo "Invalid characters in: $name" >&2; exit 1; }
+RUN for name in $(jq -r '.[] | .name' ocl.json ); do echo "Publishing: $name"; cargo publish -p "$name" --dry-run --all-features; done
+# RUN   for name in $(cargo metadata --format-version 1 --no-deps --all-features | jq -r '.packages[].name'); do echo "Publishing: $name"; cargo publish -p "$name" --dry-run --all-features; done
+#RUN cargo publish --workspace --dry-run --all-features
 
 
 RUN ls -la /usr/src/app/output_crates/package/
