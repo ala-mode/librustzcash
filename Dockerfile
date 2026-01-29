@@ -25,11 +25,11 @@ ENV RUSTFLAGS="-C codegen-units=1"
 
 RUN cargo install cargo-workspaces
 #RUN cargo workspaces list --json | jq -r '.[].name' > publish_order.txt
-RUN cargo workspaces plan --json
-#RUN cargo workspaces plan --long --json
-RUN pwd
-RUN ls -la
-RUN find ./ -type f -name "*.crate" -exec ls -lat -tc --full-time {} \; > ordered_crate_list.json
+RUN cargo workspaces plan --json > ordered_crate_list.json
+# --long
+#RUN pwd
+#RUN ls -la
+#RUN find ./ -type f -name "*.crate" -exec ls -lat -tc --full-time {} \; > ordered_crate_list.json
 
 # --- Stage 1: Build with Rust --- (amd64)
 FROM pallet-rust AS builder
@@ -49,8 +49,7 @@ RUN mkdir -p /usr/src/app/output_crates
 WORKDIR /usr/src/app
 # Copy the entire workspace to include all crates
 COPY . .
-COPY --from=json_output /usr/src/app/ordered_crate_list.json /ocl.json
-
+COPY --from=json_output /usr/src/app/ordered_crate_list.json /usr/src/app/ocl.json
 
 # print backtrace w panic, useful for development only?
 ENV RUST_BACKTRACE=1
@@ -58,6 +57,7 @@ ENV RUSTFLAGS="-C codegen-units=1"
 
 RUN pwd
 RUN ls -lat *.json
+RUN cat ocl.json
 
 
 # something in this block seems to also make the TARGET_ARCH implicit
@@ -75,7 +75,7 @@ ENV CFLAGS="-D__GNUC_PREREQ(maj,min)=1"
 # RUN ls -la ~/.cargo/ || echo "No .cargo dir"
 # RUN cat ~/.cargo/config || echo "No config"
 
-# maybe not needed. Let
+# maybe not needed.
 # This caches Cargo’s registry and git dependencies.
 # If Cargo.toml changes and invalidates the layer, the next build still reuses the cached crates instead of redownloading them.
 # RUN --mount=type=cache,target=/usr/local/cargo/registry \
@@ -105,15 +105,13 @@ ENV CFLAGS="-D__GNUC_PREREQ(maj,min)=1"
 #    --mount=type=cache,target=/usr/local/cargo/git \
 
 # regex scratch
-RUN [[ "$name" =~ ^[a-zA-Z0-9_.-]+$ ]] || { echo "Invalid characters in: $name" >&2; exit 1; }
+#RUN [[ "$name" =~ ^[a-zA-Z0-9_.-]+$ ]] || { echo "Invalid characters in: $name" >&2; exit 1; }
 RUN for name in $(jq -r '.[] | .name' ocl.json ); do echo "Publishing: $name"; cargo publish -p "$name" --dry-run --all-features; done
 # RUN   for name in $(cargo metadata --format-version 1 --no-deps --all-features | jq -r '.packages[].name'); do echo "Publishing: $name"; cargo publish -p "$name" --dry-run --all-features; done
-#RUN cargo publish --workspace --dry-run --all-features
 
 
 RUN ls -la /usr/src/app/output_crates/package/
 RUN ls -la /usr/src/app/output_crates/package/*.crate
-# RUN tree /usr/src/app/output_crates/package/*.crate
 
 # --- Stage 2: layer for local extraction ---
 FROM scratch AS export
