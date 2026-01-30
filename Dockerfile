@@ -8,11 +8,8 @@ FROM stagex/user-jq@sha256:0c75672e97f54b83661aaa498e053340305e79cdc2004a40d92b7
 FROM stagex/core-bash@sha256:6217a843ac51eb8073c3cf13be7d4d1cc9e28f7d7a1f9fd23feb0caa604f73bf AS bash-shim
 
 # --- Stage 0 get the package dependency order
+
 FROM pallet-rust AS json_output
-COPY --from=protobuf . /
-COPY --from=abseil-cpp . /
-COPY --from=jq-shim . /
-COPY --from=bash-shim . /
 
 ENV SOURCE_DATE_EPOCH=1
 ENV CARGO_HOME=/usr/local/cargo
@@ -24,14 +21,10 @@ ENV RUST_BACKTRACE=1
 ENV RUSTFLAGS="-C codegen-units=1"
 
 RUN cargo install cargo-workspaces
-#RUN cargo workspaces list --json | jq -r '.[].name' > publish_order.txt
 RUN cargo workspaces plan --json > ordered_crate_list.json
-# --long
-#RUN pwd
-#RUN ls -la
-#RUN find ./ -type f -name "*.crate" -exec ls -lat -tc --full-time {} \; > ordered_crate_list.json
 
 # --- Stage 1: Build with Rust --- (amd64)
+
 FROM pallet-rust AS builder
 COPY --from=protobuf . /
 COPY --from=abseil-cpp . /
@@ -39,7 +32,6 @@ COPY --from=jq-shim . /
 COPY --from=bash-shim . /
 
 ENV SOURCE_DATE_EPOCH=1
-# ENV CXXFLAGS="-include cstdint" #needed?
 # ENV ROCKSDB_USE_PKG_CONFIG=0 # not needed
 ENV CARGO_HOME=/usr/local/cargo
 # target dir to output all crates into a single directory
@@ -51,15 +43,15 @@ WORKDIR /usr/src/app
 COPY . .
 COPY --from=json_output /usr/src/app/ordered_crate_list.json /usr/src/app/ocl.json
 
-# print backtrace w panic, useful for development only?
-ENV RUST_BACKTRACE=1
-ENV RUSTFLAGS="-C codegen-units=1"
-
 RUN pwd
 RUN ls -lat *.json
 RUN cat ocl.json
 
-
+#needed?
+# ENV CXXFLAGS="-include cstdint"
+# print backtrace w panic, useful for development only?
+ENV RUST_BACKTRACE=1
+ENV RUSTFLAGS="-C codegen-units=1"
 # something in this block seems to also make the TARGET_ARCH implicit
 # enables the C runtime to be linked statically w/ linux musl ?
 ENV RUSTFLAGS="${RUSTFLAGS} -C target-feature=+crt-static"
@@ -106,10 +98,10 @@ ENV CFLAGS="-D__GNUC_PREREQ(maj,min)=1"
 
 # regex scratch
 #RUN [[ "$name" =~ ^[a-zA-Z0-9_.-]+$ ]] || { echo "Invalid characters in: $name" >&2; exit 1; }
-RUN for name in $(jq -r '.[] | .name' ocl.json ); do echo "Publishing: $name"; cargo publish -p "$name" --dry-run --all-features; done
-# RUN   for name in $(cargo metadata --format-version 1 --no-deps --all-features | jq -r '.packages[].name'); do echo "Publishing: $name"; cargo publish -p "$name" --dry-run --all-features; done
+RUN for name in $(jq -r '.[] | .name' ocl.json ); do echo "PUBLISHING: $name"; cargo publish -p "$name" --dry-run --target=x86_64-unknown-linux-musl; done
 
-
+# --all-features
+# --target=x86_64-unknown-linux-musl
 RUN ls -la /usr/src/app/output_crates/package/
 RUN ls -la /usr/src/app/output_crates/package/*.crate
 
