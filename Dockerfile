@@ -1,11 +1,11 @@
 # syntax=docker/dockerfile:1
-FROM stagex/pallet-rust@sha256:9c38bf1066dd9ad1b6a6b584974dd798c2bf798985bf82e58024fbe0515592ca AS pallet-rust
-FROM stagex/user-protobuf@sha256:5e67b3d3a7e7e9db9aa8ab516ffa13e54acde5f0b3d4e8638f79880ab16da72c AS protobuf 
-FROM stagex/user-abseil-cpp@sha256:3dca99adfda0cb631bd3a948a99c2d5f89fab517bda034ce417f222721115aa2 AS abseil-cpp
+FROM stagex/pallet-rust@sha256:4062550919db682ebaeea07661551b5b89b3921e3f3a2b0bc665ddea7f6af1ca AS pallet-rust
+FROM stagex/user-protobuf@sha256:b399bb058216a55130d83abcba4e5271d8630fff55abbb02ed40818b0d96ced1 AS protobuf
+FROM stagex/user-abseil-cpp@sha256:926f69e9cd112dfe3450a0af56d1560dc0a62589e61047e8c92c3b7edf8dd71e AS abseil-cpp
 # jq allows us to parse `cargo metadata` json outputs
-FROM stagex/user-jq@sha256:0c75672e97f54b83661aaa498e053340305e79cdc2004a40d92b7bf5ce906e9c AS jq-shim
+FROM stagex/user-jq@sha256:1b551175e7507d1a5d3564c01d6d0c458aa2be0172e03ccec8d2263e217c4c78 AS jq-shim
 # bash allows us to iterate over the names from `cargo metadata`
-FROM stagex/core-bash@sha256:6217a843ac51eb8073c3cf13be7d4d1cc9e28f7d7a1f9fd23feb0caa604f73bf AS bash-shim
+FROM stagex/core-bash@sha256:5b598c14eef61148baf3f5a2830a214a5985b5d3544b019e3d0ed53c6b66989a AS bash-shim
 
 # --- Stage 0 get the package dependency order
 
