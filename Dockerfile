@@ -3,7 +3,7 @@ FROM stagex/pallet-rust@sha256:4062550919db682ebaeea07661551b5b89b3921e3f3a2b0bc
 FROM stagex/user-protobuf@sha256:b399bb058216a55130d83abcba4e5271d8630fff55abbb02ed40818b0d96ced1 AS protobuf
 FROM stagex/user-abseil-cpp@sha256:926f69e9cd112dfe3450a0af56d1560dc0a62589e61047e8c92c3b7edf8dd71e AS abseil-cpp
 # jq allows us to parse `cargo metadata` json outputs
-FROM stagex/user-jq@sha256:1b551175e7507d1a5d3564c01d6d0c458aa2be0172e03ccec8d2263e217c4c78 AS jq-shim
+# FROM stagex/user-jq@sha256:1b551175e7507d1a5d3564c01d6d0c458aa2be0172e03ccec8d2263e217c4c78 AS jq-shim
 # bash allows us to iterate over the names from `cargo metadata`
 FROM stagex/core-bash@sha256:5b598c14eef61148baf3f5a2830a214a5985b5d3544b019e3d0ed53c6b66989a AS bash-shim
 
@@ -34,7 +34,7 @@ FROM stagex/core-bash@sha256:5b598c14eef61148baf3f5a2830a214a5985b5d3544b019e3d0
 FROM pallet-rust AS builder
 COPY --from=protobuf . /
 COPY --from=abseil-cpp . /
-COPY --from=jq-shim . /
+# COPY --from=jq-shim . /
 # COPY --from=bash-shim . /
 
 ENV SOURCE_DATE_EPOCH=1
